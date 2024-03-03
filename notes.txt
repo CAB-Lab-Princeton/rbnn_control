@@ -1,0 +1,14 @@
+# Done/completed
+
+
+Justice's
+- move training stuff over []
+- Lie Group Varational Integrator (LGVI) with control [X]
+- move over the utils []
+- install pytorch3d []
+- make a requirements.txt file [x]
+
+Arthur's 
+- move the control things 
+- make data set with control -- branch off and add control stuff
+- 
