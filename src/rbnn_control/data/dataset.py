@@ -139,3 +139,120 @@ class RBNNControlDataset(Dataset):
         sample_x = self.data_x[traj_idx, seq_idx:seq_idx+self.seq_len,...]
         sample_u = self.data_u[traj_idx, seq_idx:seq_idx+self.seq_len,...]
         return sample_x, sample_u
+    
+# Auxiliary functions
+def build_dataloader(args):
+    """
+    Wrapper to build dataloader.
+
+    ...
+
+    Args:
+        args (ArgumentParser): experiment parameters
+
+    """
+    dataset = get_dataset(args)
+    dataloader = DataLoader(
+        dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True
+    )
+
+    return dataloader
+
+def get_dataset(args):
+    """
+    builds a dataloader
+
+    Args:
+        args (ArgumentParser): experiment parameters
+
+    Returns:
+        Dataset
+    """
+    return LowDimDataset(args.data_dir, args.seq_len)
+
+def build_dataloader_hd(args):
+    """
+    Wrapper to build dataloader.
+
+    ...
+
+    Args:
+        args (ArgumentParser): experiment parameters
+
+    """
+    # Construct datasets
+    trainds, testds, valds = get_dataset_hd(args)
+    
+    # Dataset kwargs 
+    train_kwargs = {'batch_size': args.batch_size}
+    val_kwargs = {'batch_size': args.batch_size}
+    test_kwargs = {'batch_size': args.batch_size}
+    
+    cuda_kwargs = {'num_workers': 4}
+        
+    train_kwargs.update(cuda_kwargs)
+    val_kwargs.update(cuda_kwargs)
+    test_kwargs.update(cuda_kwargs)
+
+    # Create dataloaders
+    traindataloader = DataLoader(
+        trainds, **train_kwargs, drop_last=True, shuffle=True, pin_memory=True
+    )
+    testdataloader = DataLoader(
+        testds, **test_kwargs, drop_last=True, shuffle=True, pin_memory=True
+    )
+    valdataloader = DataLoader(
+        valds, **val_kwargs, drop_last=True, shuffle=True, pin_memory=True
+    )
+
+    return traindataloader, testdataloader, valdataloader
+
+def get_dataset_hd(args):
+    """
+    builds a dataloader
+
+    Args:
+        args (ArgumentParser): experiment parameters
+
+    Returns:
+        Dataset
+    """
+    # Load data from file
+    raw_data = np.load(args.data_dir, allow_pickle=True)
+
+    traj_len = raw_data.shape[1]
+
+    rd_split = shuffle_and_split(raw_data=raw_data, test_split=args.test_split, val_split=args.val_split) 
+    
+    if traj_len > 100:
+        train_dataset = rd_split[0][:, :100, ...]
+        val_dataset = rd_split[1][:, :100, ...]
+        test_dataset = rd_split[2][:, :100, ...]
+    else:
+        train_dataset = rd_split[0]
+        val_dataset = rd_split[1]
+        test_dataset = rd_split[2]
+
+    trainds_rbnn = RBNNControlDataset(data=train_dataset, seq_len=args.seq_len)
+    testds_rbnn = RBNNControlDataset(data=test_dataset, seq_len=args.seq_len)
+    valds_rbnn = RBNNControlDataset(data=val_dataset, seq_len=args.seq_len)
+
+    return trainds_rbnn, testds_rbnn, valds_rbnn
+
+# Auxilary function -- shuffle and split dataset
+def shuffle_and_split(raw_data: np.ndarray, test_split: float, val_split: float):
+    """
+    Function to shuffle and split the dataset.
+
+    ...
+    """
+    n_traj = raw_data.shape[0]
+
+    test_len = int(test_split * n_traj)
+    val_len = int((1. - test_split) * val_split * n_traj)
+    train_len = int((1. - test_split) * (1. - val_split) * n_traj)
+    
+    np.random.shuffle(raw_data)
+        
+    rd_split = np.split(raw_data.astype(float), [train_len, train_len + val_len, train_len + val_len + test_len], axis=0)
+    return rd_split
